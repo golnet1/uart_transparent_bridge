@@ -21,9 +21,16 @@ h1{font-size:17px;margin:0;letter-spacing:.4px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
 .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:0 0 14px}
 .row{display:flex;align-items:center;gap:10px;margin:9px 0;flex-wrap:wrap}
-.row label:not(.switch){flex:1;min-width:110px;color:var(--muted)}
+.row label:not(.switch):not(.filebtn){flex:1;min-width:110px;color:var(--muted)}
 .row label.inline-check{flex:0 0 auto;min-width:0;display:inline-flex;align-items:center;
   gap:6px;white-space:nowrap;color:var(--txt)}
+.filepick{display:inline-flex;align-items:center;gap:8px;min-width:0}
+.filepick input[type=file]{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
+.filepick label.filebtn{display:inline-block;background:#21262d;border:1px solid var(--line);
+  color:var(--txt);border-radius:6px;padding:8px 14px;cursor:pointer;font-weight:400;white-space:nowrap}
+.filepick label.filebtn:hover{border-color:var(--acc)}
+.filepick .filename{color:var(--muted);font-size:12px;max-width:190px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
 select,input,textarea{background:#0d1117;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:7px 9px;font:inherit;outline:none}
 select:focus,input:focus,textarea:focus{border-color:var(--acc)}
 input[type=text],input[type=password]{width:150px}
@@ -188,7 +195,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
   <section class="card">
     <h2 data-i18n="hOta">Обновление прошивки (OTA)</h2>
-    <div class="row"><label data-i18n="fwFileLbl">Файл прошивки</label><input type="file" id="otaFile" accept=".bin,application/octet-stream"></div>
+    <div class="row"><label data-i18n="fwFileLbl">Файл прошивки</label><div class="filepick"><input type="file" id="otaFile" accept=".bin,application/octet-stream"><label class="filebtn" for="otaFile" data-i18n="chooseFileBtn">Выбрать файл</label><span class="filename" id="otaFileName">файл не выбран</span></div></div>
     <div class="row"><button id="otaBtn" data-i18n="flashFileBtn">Прошить из файла</button><button class="sec" id="checkOtaBtn" data-i18n="checkUpdateBtn">Проверить обновления</button><button class="sec" id="rebootBtn" data-i18n="rebootBtn">Перезагрузить</button></div>
     <div class="row"><label class="inline-check" data-i18n-title="autoUpdateTitle"><input type="checkbox" id="autoUpdate"> <span data-i18n="autoUpdateLbl">обновлять автоматически</span></label></div>
     <div class="hint" id="otaVerInfo"></div>
@@ -246,7 +253,8 @@ const I18N={
   wifiHint:'Telnet доступен на порту 23. При подключении к Wi-Fi точка доступа отключается.',
   hTime:'Время (NTP)', ntpServerLbl:'NTP сервер', ntpTzLbl:'Часовой пояс (POSIX TZ)', ntpApply:'Применить время',
   ntpHint:'После синхронизации журнал и монитор показывают реальное время. Примеры TZ: <code>MSK-3</code>, <code>UTC0</code>, <code>CET-1CEST,M3.5.0,M10.5.0/3</code>.',
-  hOta:'Обновление прошивки (OTA)', fwFileLbl:'Файл прошивки', flashFileBtn:'Прошить из файла',
+  hOta:'Обновление прошивки (OTA)', fwFileLbl:'Файл прошивки', chooseFileBtn:'Выбрать файл',
+  noFile:'файл не выбран', flashFileBtn:'Прошить из файла',
   rebootBtn:'Перезагрузить', checkUpdateBtn:'Проверить обновления', updateBtn:'Обновить',
   autoUpdateLbl:'обновлять автоматически',
   autoUpdateTitle:'Проверять версию на GitHub при загрузке и раз в сутки; при наличии новой версии обновляться без подтверждения',
@@ -321,7 +329,8 @@ const I18N={
   wifiHint:'Telnet is available on port 23. When STA connects, the access point is switched off.',
   hTime:'Time (NTP)', ntpServerLbl:'NTP server', ntpTzLbl:'Time zone (POSIX TZ)', ntpApply:'Apply time',
   ntpHint:'After synchronization the log and monitor show real time. TZ examples: <code>MSK-3</code>, <code>UTC0</code>, <code>CET-1CEST,M3.5.0,M10.5.0/3</code>.',
-  hOta:'Firmware update (OTA)', fwFileLbl:'Firmware file', flashFileBtn:'Flash from file',
+  hOta:'Firmware update (OTA)', fwFileLbl:'Firmware file', chooseFileBtn:'Choose file',
+  noFile:'no file selected', flashFileBtn:'Flash from file',
   rebootBtn:'Reboot', checkUpdateBtn:'Check for updates', updateBtn:'Update',
   autoUpdateLbl:'update automatically',
   autoUpdateTitle:'Check the version on GitHub at boot and once a day; install a newer firmware without confirmation',
@@ -473,6 +482,10 @@ function formatUptime(sec){
   if(m)return m+(LANG==='en'?' min ':' мин ')+p(s)+(LANG==='en'?' s':' с');
   return s+(LANG==='en'?' s':' с');
 }
+function updateOtaFileName(){
+  const f=$('otaFile').files&&$('otaFile').files[0];
+  $('otaFileName').textContent=f?f.name:t('noFile');
+}
 function applyLang(){
   document.documentElement.lang=LANG;
   document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=t(el.dataset.i18n);});
@@ -483,7 +496,7 @@ function applyLang(){
   $('langFlag').src=FLAG_SRC[LANG];
   $('langLabel').textContent=LANG.toUpperCase();
   document.querySelectorAll('#langMenu [data-lang]').forEach(el=>el.classList.toggle('active',el.dataset.lang===LANG));
-  refresh(true);updateCmdModeUI();tickClock();rerenderLog();
+  updateOtaFileName();refresh(true);updateCmdModeUI();tickClock();rerenderLog();
 }
 $('lang').onchange=e=>{LANG=e.target.value;localStorage.setItem(LANG_KEY,LANG);applyLang();};
 /* Выпадающий список с картинками флагов: в родном <select> картинки не рисуются */
@@ -748,6 +761,7 @@ $('passwdBtn').onclick=async()=>{
   const j=await api('/api/passwd',{old:old,new:nw});
   if(j&&j.ok){$('oldPass').value='';$('newPass').value='';$('newPass2').value='';}
 };
+$('otaFile').onchange=updateOtaFileName;
 $('otaBtn').onclick=async()=>{
   const f=$('otaFile').files&&$('otaFile').files[0];
   if(!f){toast(t('fwFileMissing'),true);return;}
