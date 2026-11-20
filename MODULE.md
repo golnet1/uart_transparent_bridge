@@ -1,6 +1,6 @@
 # Pass-Through UART — описание работы модуля
 
-Документ описывает внутреннее устройство прошивки **Pass-Through UART v1.0.7**:
+Документ описывает внутреннее устройство прошивки **Pass-Through UART v1.0.8**:
 как устроены подсистемы, в каком порядке они запускаются, как данные идут между
 UART, вебом, Telnet, MQTT и журналом. Для пользовательских инструкций см.
 [README.md](README.md).
@@ -493,7 +493,7 @@ POST /api/config/import   → применение файла
 {
   "format": "pass-through-uart-config",
   "config_format": 1,
-  "app_version": "1.0.7",
+  "app_version": "1.0.8",
   "saved_at": "20.11 03:30:00",
   "auth_hash": "...",
   "config": { /* все поля app_config_t */ }
@@ -695,8 +695,12 @@ STA IP `10.10.100.235`, SSID `Dacha-2.4`.
   Если доступна новая версия и стоит `config_get()->auto_update`, вызывается
   `ota_start_remote_update()`; иначе событие с версией уходит в журнал, а веб
   показывает кнопку «Обновить».
-- `ota_start_url()` копирует URL и создаёт задачу `ota` (стек 8192):
-  `esp_https_ota()` с timeout 30 с, keep-alive и корневыми сертификатами.
+- `ota_start_url()` копирует URL и создаёт задачу `ota` (стек 16384).
+  Перед загрузкой задача ждёт STA до 10 с, затем делает до 3 попыток
+  `esp_https_ota()` (timeout 20 с, keep-alive выключен, корневые сертификаты)
+  с паузой 3 с между ними. Это переживает transient-обрывы TCP вида
+  `ESP_ERR_HTTP_CONNECT` / `Software caused connection abort`; попытки
+  отражаются в журнале как «OTA: повторная попытка N/3».
 - `POST /api/ota/file` читает тело запроса кусками по 4 КБ и пишет в слот через
   `ota_stream_begin()` / `ota_stream_write()` / `ota_stream_finish()`
   (`esp_ota_begin(OTA_SIZE_UNKNOWN)` + `esp_ota_write()` + `esp_ota_end()` +

@@ -9,6 +9,7 @@
 #include "esp_https_ota.h"
 #include "esp_http_client.h"
 #include "esp_system.h"
+#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -48,6 +49,9 @@ static void reboot_task(void *arg)
 
 /* ---------- Загрузка по HTTPS (обновление с GitHub) ---------- */
 
+#define OTA_HTTP_ATTEMPTS 3
+#define OTA_HTTP_TIMEOUT_MS 20000
+
 static void ota_task(void *arg)
 {
     char *url = (char *)arg;
@@ -55,17 +59,40 @@ static void ota_task(void *arg)
     snprintf(s_last, sizeof(s_last), "загрузка...");
     event_bus_publish_str(EV_OTA, "OTA: начало обновления");
 
-    esp_http_client_config_t http_cfg = {
-        .url = url,
-        .timeout_ms = 30000,
-        .keep_alive_enable = true,
+    esp_err_t err = ESP_FAIL;
+    for (int attempt = 1; attempt <= OTA_HTTP_ATTEMPTS; attempt++) {
+        /* На всякий случай ждём STA — без IP HTTPS-запрос оборвётся сразу. */
+        int waited = 0;
+        while (!wifi_sta_connected() && waited < 20) {
+            vTaskDelay(pdMS_TO_TICKS(500));
+            waited += 500;
+        }
+        if (!wifi_sta_connected()) {
+            err = ESP_ERR_WIFI_NOT_CONNECT;
+            event_bus_publish_str(EV_OTA, "OTA: нет STA, повторим");
+        } else {
+            esp_http_client_config_t http_cfg = {
+                .url = url,
+                .timeout_ms = OTA_HTTP_TIMEOUT_MS,
+                .keep_alive_enable = false,
 #if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
-        .crt_bundle_attach = esp_crt_bundle_attach,
+                .crt_bundle_attach = esp_crt_bundle_attach,
 #endif
-    };
-    esp_https_ota_config_t ota_cfg = { .http_config = &http_cfg };
+            };
+            esp_https_ota_config_t ota_cfg = { .http_config = &http_cfg };
+            err = esp_https_ota(&ota_cfg);
+        }
 
-    esp_err_t err = esp_https_ota(&ota_cfg);
+        if (err == ESP_OK) break;
+        if (attempt < OTA_HTTP_ATTEMPTS) {
+            char msg[128];
+            snprintf(msg, sizeof(msg), "OTA: повторная попытка %d/%d: %s",
+                     attempt + 1, OTA_HTTP_ATTEMPTS, esp_err_to_name(err));
+            event_bus_publish_str(EV_OTA, msg);
+            vTaskDelay(pdMS_TO_TICKS(3000));
+        }
+    }
+
     if (err == ESP_OK) {
         snprintf(s_last, sizeof(s_last), "успешно, перезагрузка");
         event_bus_publish_str(EV_OTA, "OTA: прошивка установлена, перезагрузка");
@@ -88,7 +115,7 @@ void ota_start_url(const char *url)
     char *copy = strdup(url);
     if (!copy) return;
     s_busy = true;
-    xTaskCreate(ota_task, "ota", 8192, copy, 5, NULL);
+    xTaskCreate(ota_task, "ota", 16384, copy, 5, NULL);
 }
 
 void ota_start_remote_update(void)

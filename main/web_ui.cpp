@@ -418,6 +418,8 @@ const LOG_DICT=[
  ['ошибка сохранения: ','save error: '],
  ['ошибка MQTT','MQTT error'],
  ['OTA: начало обновления','OTA: update started'],
+  ['OTA: повторная попытка','OTA: retry'],
+  ['OTA: нет STA, повторим','OTA: no STA, retry'],
  ['OTA: прошивка установлена, перезагрузка','OTA: firmware installed, rebooting'],
  ['OTA: прошивка подтверждена','OTA: firmware confirmed'],
  ['OTA уже выполняется','OTA already in progress'],
@@ -789,7 +791,7 @@ $('cfgSaveBtn').onclick=async()=>{
     const blob=new Blob([await r.text()],{type:'application/json'});
     const a=document.createElement('a'), d=new Date(), p=n=>String(n).padStart(2,'0');
     a.href=URL.createObjectURL(blob);
-    a.download='pass-through-uart-'+(($('ver').textContent||'1.0.7'))+'-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'.json';
+    a.download='pass-through-uart-'+(($('ver').textContent||'1.0.8'))+'-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'.json';
     document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),1000);
     toast(t('cfgSavedFile'));
