@@ -292,9 +292,11 @@ static esp_err_t status_get(httpd_req_t *req)
     cJSON_AddStringToObject(root, "auto_target", c->auto_target);
     cJSON_AddStringToObject(root, "auto_text", c->auto_text);
     cJSON_AddNumberToObject(root, "log_lines", event_bus_log_lines());
-    cJSON_AddStringToObject(root, "ota_url", c->ota_url);
+    cJSON_AddBoolToObject(root, "auto_update", c->auto_update);
     cJSON_AddBoolToObject(root, "ota_busy", ota_busy());
     cJSON_AddStringToObject(root, "ota_last", ota_last_result());
+    cJSON_AddStringToObject(root, "ota_remote", ota_remote_version());
+    cJSON_AddBoolToObject(root, "ota_available", ota_update_available());
     cJSON_AddStringToObject(root, "cmd_mode_name",
                             c->cmd_mode == 0 ? "URL" : (c->cmd_mode == 1 ? "MQTT" : "URL+MQTT"));
 
@@ -409,8 +411,8 @@ static void config_apply_json(cJSON *cfg, cJSON *root, bool import_mode,
             f->wifi_changed = true;
         }
     }
-    if ((j = cJSON_GetObjectItem(cfg, "ota_url")) && cJSON_IsString(j))
-        snprintf(c->ota_url, sizeof(c->ota_url), "%s", j->valuestring);
+    if ((j = cJSON_GetObjectItem(cfg, "auto_update")) && cJSON_IsBool(j))
+        c->auto_update = cJSON_IsTrue(j);
 
     /* Каналы команд и время */
     if ((j = cJSON_GetObjectItem(cfg, "cmd_mode")) && cJSON_IsNumber(j)) {
@@ -525,7 +527,7 @@ static esp_err_t config_export_get(httpd_req_t *req)
     cJSON_AddStringToObject(cfg, "auto_text", c->auto_text);
     cJSON_AddStringToObject(cfg, "wifi_ssid", c->wifi_ssid);
     cJSON_AddStringToObject(cfg, "wifi_pass", c->wifi_pass);
-    cJSON_AddStringToObject(cfg, "ota_url", c->ota_url);
+    cJSON_AddBoolToObject(cfg, "auto_update", c->auto_update);
     cJSON_AddNumberToObject(cfg, "cmd_mode", c->cmd_mode);
     cJSON_AddNumberToObject(cfg, "cmd_target", c->cmd_target);
     cJSON_AddStringToObject(cfg, "mqtt_uri", c->mqtt_uri);
@@ -694,24 +696,62 @@ static esp_err_t wifi_scan_get(httpd_req_t *req)
     return send_json(req, root);
 }
 
+/* POST /api/ota — обновление с GitHub, URL зашит в прошивке. */
 static esp_err_t ota_post(httpd_req_t *req)
 {
     if (!authorized(req)) return need_auth(req);
-    char *body = read_body(req);
-    if (!body) return send_ok(req, false, "нет тела запроса");
-    cJSON *root = cJSON_Parse(body);
-    free(body);
-    if (!root) return send_ok(req, false, "неверный JSON");
-    cJSON *j = cJSON_GetObjectItem(root, "url");
-    if (!j || !cJSON_IsString(j) || !j->valuestring[0]) {
-        cJSON_Delete(root);
-        return send_ok(req, false, "нужен URL");
+    ota_start_remote_update();
+    return send_ok(req, true, "OTA запущена");
+}
+
+/* POST /api/ota/check — разовая проверка версии на GitHub. */
+static esp_err_t ota_check_post(httpd_req_t *req)
+{
+    if (!authorized(req)) return need_auth(req);
+    ota_check_now();
+    return send_ok(req, true, "проверка запущена");
+}
+
+/* POST /api/ota/file — прошивка локальным .bin, тело запроса — файл целиком. */
+static esp_err_t ota_file_post(httpd_req_t *req)
+{
+    if (!authorized(req)) return need_auth(req);
+    int total = req->content_len;
+    if (total <= 0) return send_ok(req, false, "файл прошивки пуст");
+
+    esp_err_t err = ota_stream_begin();
+    if (err != ESP_OK) {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "OTA: %s", esp_err_to_name(err));
+        return send_ok(req, false, msg);
     }
-    app_config_t *c = config_mut();
-    snprintf(c->ota_url, sizeof(c->ota_url), "%s", j->valuestring);
-    config_save();
-    ota_start(c->ota_url);
-    cJSON_Delete(root);
+
+    uint8_t buf[4096];
+    int off = 0;
+    while (off < total) {
+        int chunk = total - off;
+        if (chunk > (int)sizeof(buf)) chunk = sizeof(buf);
+        int r = httpd_req_recv(req, (char *)buf, chunk);
+        if (r <= 0) {
+            ota_stream_abort();
+            return send_ok(req, false, "ошибка приёма файла");
+        }
+        err = ota_stream_write(buf, (size_t)r);
+        if (err != ESP_OK) {
+            ota_stream_abort();
+            char msg[96];
+            snprintf(msg, sizeof(msg), "OTA: %s", esp_err_to_name(err));
+            return send_ok(req, false, msg);
+        }
+        off += r;
+    }
+
+    err = ota_stream_finish();
+    if (err != ESP_OK) {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "OTA: %s", esp_err_to_name(err));
+        return send_ok(req, false, msg);
+    }
     return send_ok(req, true, "OTA запущена");
 }
 
@@ -847,6 +887,8 @@ void web_init(void)
         { .uri = "/api/log/clear", .method = HTTP_POST, .handler = log_clear_post },
         { .uri = "/api/wifi/scan", .method = HTTP_GET,  .handler = wifi_scan_get },
         { .uri = "/api/ota",       .method = HTTP_POST, .handler = ota_post },
+        { .uri = "/api/ota/check", .method = HTTP_POST, .handler = ota_check_post },
+        { .uri = "/api/ota/file",  .method = HTTP_POST, .handler = ota_file_post },
         { .uri = "/api/reboot",    .method = HTTP_POST, .handler = reboot_post },
         { .uri = "/ws",            .method = HTTP_GET,  .handler = ws_handler,
           .is_websocket = true },

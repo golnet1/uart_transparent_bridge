@@ -38,6 +38,9 @@ typedef struct {
     bool auto_baud1;
     bool auto_baud2;
     char baud_probe[64];      /* команды опроса через '|', например AT|AT+GMR */
+
+    /* автообновление прошивки — новое поле в КОНЦЕ для совместимости NVS */
+    bool auto_update;
 } app_config_t;
 
 const app_config_t *config_get(void);

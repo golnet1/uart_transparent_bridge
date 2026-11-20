@@ -9,7 +9,7 @@
 
 #define APP_NAME    "Pass-Through UART"
 #define APP_SSID    "UART_BRIDGE"
-#define APP_VERSION "1.0.4"
+#define APP_VERSION "1.0.5"
 
 /* Типы сообщений в общей шине событий */
 typedef enum {

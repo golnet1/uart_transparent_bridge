@@ -1,6 +1,6 @@
 # Pass-Through UART — описание работы модуля
 
-Документ описывает внутреннее устройство прошивки **Pass-Through UART v1.0.4**:
+Документ описывает внутреннее устройство прошивки **Pass-Through UART v1.0.5**:
 как устроены подсистемы, в каком порядке они запускаются, как данные идут между
 UART, вебом, Telnet, MQTT и журналом. Для пользовательских инструкций см.
 [README.md](README.md).
@@ -127,7 +127,7 @@ ESP32 работает прозрачным мостом между двумя �
 | `auto_ms` | `0` | автокоманда выключена |
 | `auto_target` / `auto_text` | `1` / `AT` | параметры автокоманды |
 | `wifi_ssid` / `wifi_pass` | пусто | STA не подключён, работает только AP |
-| `ota_url` | пусто | URL прошивки не задан |
+| `auto_update` | `false` | автообновление выключено; URL прошивки зашит в прошивку |
 | `cmd_mode` | `0` | HEX-канал: адресная строка |
 | `cmd_target` | `3` | цель HEX-команд по умолчанию — оба UART |
 | `mqtt_uri` | пусто | брокер не задан |
@@ -334,7 +334,8 @@ autobaud 1|2|both|off [команды]   автоопределение по о�
 bridge|echo|mirror|syslog on|off  режимы моста
 log [N] / log clear               журнал
 wifi <ssid> <password>            подключиться к AP
-ota <http://.../fw.bin>           обновление по воздуху
+ota                              обновление с GitHub
+otacheck                         проверить версию на GitHub
 auto <мс> <1|2|both|usb> <текст>  автокоманда (0 = выкл)
 charset cp866|utf8                кодировка вывода терминала
 passwd <новый>                    смена пароля (веб + telnet)
@@ -436,7 +437,9 @@ UTF-8 и подставляет `?` для неподдерживаемых си
 | GET | `/api/log?n=200` | последние N строк журнала массивом `lines` |
 | POST | `/api/log/clear` | очистка журнала |
 | GET | `/api/wifi/scan` | результат блокирующего сканирования AP |
-| POST | `/api/ota` | `{url}` — запуск обновления |
+| POST | `/api/ota` | запуск обновления с GitHub (URL зашит в прошивку) |
+| POST | `/api/ota/check` | разовая проверка версии на GitHub |
+| POST | `/api/ota/file` | тело запроса — `.bin` файл, запись в OTA-слот |
 | POST | `/api/reboot` | перезагрузка через 500 мс |
 | GET | `/ws` | WebSocket (только GET для handshake) |
 
@@ -451,7 +454,7 @@ UTF-8 и подставляет `?` для неподдерживаемых си
 version, uptime, uptime_text, baud1, baud2, auto_baud1, auto_baud2, baud_probe,
 baud1_detected, baud2_detected, bridge, echo, mirror, syslog,
 usb_target, auto_ms, auto_target, auto_text, log_lines,
-ota_url, ota_busy, ota_last, cmd_mode_name,
+auto_update, ota_busy, ota_last, ota_remote, ota_available, cmd_mode_name,
 mqtt:  {mode,target,target_effective,uri,uri_effective,topic,user,connected},
 time:  {synced,server,tz,str,epoch,offset},
 counters: {rx1,rx2,tx1,tx2},
@@ -490,7 +493,7 @@ POST /api/config/import   → применение файла
 {
   "format": "pass-through-uart-config",
   "config_format": 1,
-  "app_version": "1.0.4",
+  "app_version": "1.0.5",
   "saved_at": "20.11 03:30:00",
   "auth_hash": "...",
   "config": { /* все поля app_config_t */ }
@@ -531,8 +534,10 @@ POST /api/config/import   → применение файла
    в буфере устройства, а не количество после фильтра.
 5. **Wi-Fi** — состояние AP/STA, сканирование SSID с фильтром, подключение.
 6. **Время (NTP)** — сервер и TZ, кнопка «Применить время».
-7. **OTA** — URL прошивки, «Прошить», «Перезагрузить», а также кнопки
-   «Сохранить настройки в файл» / «Восстановить из файла».
+7. **OTA** — выбор локального `.bin`, «Прошить из файла», «Проверить обновления»,
+   галка «обновлять автоматически», строку версий, кнопку «Обновить» (появляется
+   при наличии новой версии) и «Перезагрузить». В одном ряду с OTA-кнопками
+   находятся «Сохранить настройки» / «Восстановить».
 8. **Безопасность** — текущий/новый/повтор пароля.
 
 Обновление статуса — раз в 2,5 с; при потере WebSocket — переподключение раз в 1,5 с.
@@ -675,17 +680,30 @@ STA IP `10.10.100.235`, SSID `Dacha-2.4`.
 ## 15. OTA (`ota.c`)
 
 - Таблица разделов `partitions_ota.csv` — два слота приложения.
-- `ota_init()` при старте проверяет состояние текущего слота; если
-  `ESP_OTA_IMG_PENDING_VERIFY`, вызывает `esp_ota_mark_app_valid_cancel_rollback()`
-  (прошивка подтверждена, откат отменён).
-- `ota_start(url)` копирует URL и создаёт задачу `ota` (стек 8192):
-  `esp_https_ota()` с `esp_http_client` (timeout 15 с, keep-alive) и набором
-  корневых сертификатов `esp_crt_bundle_attach` для HTTPS.
-- Успех → запись «успешно, перезагрузка», событие `EV_OTA`, задержка 1,2 с,
-  `esp_restart()`. Ошибка → строка `ошибка: <esp_err_to_name>`, событие в журнал.
-- Пока идёт обновление, `ota_busy() == true`; повторный `ota_start` игнорируется.
-- Запуск: веб-карточка OTA, `POST /api/ota` или команда `ota <url>`. Статус —
-  в `/api/status` (`ota_busy`, `ota_last`) и в шапке веба.
+- `ota_init()` при старте подтверждает слот (`ESP_OTA_IMG_PENDING_VERIFY` →
+  `esp_ota_mark_app_valid_cancel_rollback()`) и запускает задачу `ota_daily`.
+- **Адреса зашиты в прошивку:** `OTA_VERSION_URL` → `version.txt` в корне
+  репозитория, `OTA_FIRMWARE_URL` → raw-файл
+  `build/PassThroughUART.bin`. Публичная страница каталога —
+  `https://github.com/golnet1/uart_transparent_bridge/tree/main/build`.
+- `check_version()` скачивает `version.txt` через `esp_http_client` (HTTPS,
+  `esp_crt_bundle_attach`), сравнивает четыре числовых компонента с `APP_VERSION`
+  и сохраняет результат в `ota_remote` / `ota_available`. Проверка делается
+  при появлении STA после загрузки, раз в сутки и по `POST /api/ota/check`.
+  Если доступна новая версия и стоит `config_get()->auto_update`, вызывается
+  `ota_start_remote_update()`; иначе событие с версией уходит в журнал, а веб
+  показывает кнопку «Обновить».
+- `ota_start_url()` копирует URL и создаёт задачу `ota` (стек 8192):
+  `esp_https_ota()` с timeout 30 с, keep-alive и корневыми сертификатами.
+- `POST /api/ota/file` читает тело запроса кусками по 4 КБ и пишет в слот через
+  `ota_stream_begin()` / `ota_stream_write()` / `ota_stream_finish()`
+  (`esp_ota_begin(OTA_SIZE_UNKNOWN)` + `esp_ota_write()` + `esp_ota_end()` +
+  `esp_ota_set_boot_partition()`). При обрыве — `ota_stream_abort()`.
+- Успех → запись «успешно, перезагрузка», событие `EV_OTA`, задержка 1,5 с,
+  `esp_restart()`. Ошибка → строка `ошибка: <esp_err_to_name>` в `ota_last`.
+- Пока идёт обновление, `ota_busy() == true`; повторный запуск игнорируется.
+- Статус в `/api/status`: `auto_update`, `ota_busy`, `ota_last`, `ota_remote`,
+  `ota_available`; в шапке — `ota_last`.
 
 ---
 

@@ -86,7 +86,8 @@ static void print_help(cli_session_t *s)
     oprint(s, "  syslog on|off               логи ESP-IDF на USB");
     oprint(s, "  log [N] | log clear         журнал команд");
     oprint(s, "  wifi <ssid> <password>      подключиться к AP");
-    oprint(s, "  ota <http://.../fw.bin>     обновление по воздуху");
+    oprint(s, "  ota                       обновление с GitHub");
+    oprint(s, "  otacheck                  проверить версию на GitHub");
     oprint(s, "  auto <ms> <1|2|both> <текст>  автокоманда ESP32 (0=выкл)");
     oprint(s, "  monitor on|off              (telnet) показывать трафик");
     oprint(s, "  charset cp866|utf8          кодировка вывода терминала");
@@ -296,14 +297,11 @@ void cli_process(cli_session_t *s, char *line)
         wifi_reconnect();
         oprint(s, "WiFi сохранён: %s", ssid);
     } else if (!strcasecmp(cmd, "ota")) {
-        char *url = save;
-        while (url && (*url == ' ' || *url == '\t')) url++;
-        if (!url || !*url) { oprint(s, "использование: ota <url>"); return; }
-        app_config_t *c = config_mut();
-        snprintf(c->ota_url, sizeof(c->ota_url), "%s", url);
-        config_save();
-        ota_start(c->ota_url);
-        oprint(s, "OTA запущена: %s", c->ota_url);
+        ota_start_remote_update();
+        oprint(s, "OTA запущена с GitHub");
+    } else if (!strcasecmp(cmd, "otacheck")) {
+        ota_check_now();
+        oprint(s, "проверка версии запущена");
     } else if (!strcasecmp(cmd, "auto")) {
         char *a = strtok_r(NULL, " \t", &save);
         char *t = strtok_r(NULL, " \t", &save);

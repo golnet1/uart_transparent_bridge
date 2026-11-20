@@ -188,11 +188,14 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
   <section class="card">
     <h2 data-i18n="hOta">Обновление прошивки (OTA)</h2>
-    <div class="row"><label data-i18n="fwUrlLbl">URL прошивки</label><input type="text" id="otaUrl" style="width:230px" placeholder="http://…/firmware.bin"></div>
-    <div class="row"><button id="otaBtn" data-i18n="flashBtn">Прошить</button><button class="sec" id="rebootBtn" data-i18n="rebootBtn">Перезагрузить</button></div>
-    <div class="row"><button id="cfgSaveBtn" data-i18n="cfgSaveBtn">Сохранить настройки в файл</button><button class="sec" id="cfgLoadBtn" data-i18n="cfgLoadBtn">Восстановить из файла</button><input type="file" id="cfgFile" accept="application/json,.json" style="display:none"></div>
+    <div class="row"><label data-i18n="fwFileLbl">Файл прошивки</label><input type="file" id="otaFile" accept=".bin,application/octet-stream"></div>
+    <div class="row"><button id="otaBtn" data-i18n="flashFileBtn">Прошить из файла</button><button class="sec" id="checkOtaBtn" data-i18n="checkUpdateBtn">Проверить обновления</button><button class="sec" id="rebootBtn" data-i18n="rebootBtn">Перезагрузить</button></div>
+    <div class="row"><label class="inline-check" data-i18n-title="autoUpdateTitle"><input type="checkbox" id="autoUpdate"> <span data-i18n="autoUpdateLbl">обновлять автоматически</span></label></div>
+    <div class="hint" id="otaVerInfo"></div>
+    <div class="row" id="otaUpdateBox" style="display:none"><span class="badge warn" id="otaUpdateInfo"></span><button id="otaRemoteBtn" data-i18n="updateBtn">Обновить</button></div>
+    <div class="row"><button id="cfgSaveBtn" data-i18n="cfgSaveBtn">Сохранить настройки</button><button class="sec" id="cfgLoadBtn" data-i18n="cfgLoadBtn">Восстановить</button><input type="file" id="cfgFile" accept="application/json,.json" style="display:none"></div>
     <div class="hint" data-i18n="cfgHint">Файл настроек содержит все параметры, пароли Wi-Fi/MQTT и хеш веб-пароля. Храните его в безопасном месте. После восстановления текущие настройки будут заменены.</div>
-    <div class="hint" data-i18n="otaHint">После успешной загрузки ESP32 перезагрузится. Раздел с двумя OTA-слотами уже в partitions_ota.csv.</div>
+    <div class="hint" data-i18n="otaHint">Локальный .bin прошивается кнопкой «Прошить из файла». Версия проверяется в GitHub при загрузке модуля и раз в сутки; если найдена новая — она появится выше. С включённой галкой автообновления прошивка ставится без подтверждения.</div>
   </section>
 
   <section class="card">
@@ -243,10 +246,16 @@ const I18N={
   wifiHint:'Telnet доступен на порту 23. При подключении к Wi-Fi точка доступа отключается.',
   hTime:'Время (NTP)', ntpServerLbl:'NTP сервер', ntpTzLbl:'Часовой пояс (POSIX TZ)', ntpApply:'Применить время',
   ntpHint:'После синхронизации журнал и монитор показывают реальное время. Примеры TZ: <code>MSK-3</code>, <code>UTC0</code>, <code>CET-1CEST,M3.5.0,M10.5.0/3</code>.',
-  hOta:'Обновление прошивки (OTA)', fwUrlLbl:'URL прошивки', flashBtn:'Прошить', rebootBtn:'Перезагрузить',
-  cfgSaveBtn:'Сохранить настройки в файл', cfgLoadBtn:'Восстановить из файла',
+  hOta:'Обновление прошивки (OTA)', fwFileLbl:'Файл прошивки', flashFileBtn:'Прошить из файла',
+  rebootBtn:'Перезагрузить', checkUpdateBtn:'Проверить обновления', updateBtn:'Обновить',
+  autoUpdateLbl:'обновлять автоматически',
+  autoUpdateTitle:'Проверять версию на GitHub при загрузке и раз в сутки; при наличии новой версии обновляться без подтверждения',
+  updateInfo:'Доступна версия {remote} (сейчас {local}).', updateNone:'Обновлений нет',
+  updateCheckErr:'не удалось проверить версию', updateCheckStarted:'проверка запущена',
+  fwFileMissing:'выберите файл прошивки',
+  cfgSaveBtn:'Сохранить настройки', cfgLoadBtn:'Восстановить',
   cfgHint:'Файл настроек содержит все параметры, пароли Wi-Fi/MQTT и хеш веб-пароля. Храните его в безопасном месте. После восстановления текущие настройки будут заменены.',
-  otaHint:'После успешной загрузки ESP32 перезагрузится. Раздел с двумя OTA-слотами уже в partitions_ota.csv.',
+  otaHint:'Локальный .bin прошивается кнопкой «Прошить из файла». Версия проверяется в GitHub при загрузке модуля и раз в сутки; если найдена новая — она появится выше. С включённой галкой автообновления прошивка ставится без подтверждения.',
   hSecurity:'Безопасность', oldPassLbl:'Текущий пароль', newPassLbl:'Новый пароль',
   newPass2Lbl:'Повторите новый', passwdBtn:'Сменить пароль',
   securityHint:'Пароль — это путь в адресе: <code>http://&lt;ip&gt;/sec</code>, по умолчанию <code>sec</code>. Он же запрашивается в Telnet. Разрешены латиница, цифры и <code>. _ - ~</code>. Меняется здесь или командой <code>passwd &lt;новый&gt;</code>. После смены откройте новый адрес.',
@@ -265,7 +274,7 @@ const I18N={
   urlSendLabel:'Отправка: ', urlReadLabel:'Чтение ответа: ', mqttCodeLabel:'MQTT код: ',
   mqttTargetLabel:'MQTT цель: ', mqttOutLabel:'MQTT исходящие: ', trafficLabel:'трафик',
   errLink:'ошибка связи', foundAps:'найдено точек: ', passwordMissing:'Password is not specified',
-  passwordMismatch:'Passwords do not match', specifyUrl:'укажите URL',
+  passwordMismatch:'Passwords do not match',
   exportErr:'ошибка экспорта настроек', cfgSavedFile:'настройки сохранены в файл',
   saveFileErr:'ошибка сохранения файла', restoreConfirm:'Восстановить настройки из {f}? Текущие настройки будут заменены.',
   readFileErr:'ошибка чтения файла настроек', rebootConfirm:'Перезагрузить ESP32?',
@@ -279,7 +288,10 @@ const I18N={
   'msg:в файле нет настроек':'в файле нет настроек',
   'msg:нет данных':'нет данных', 'msg:нужен URL':'нужен URL',
   'msg:не удалось сформировать файл':'не удалось сформировать файл',
-  'msg:OTA запущена':'OTA запущена', 'msg:перезагрузка':'перезагрузка'
+  'msg:OTA запущена':'OTA запущена', 'msg:перезагрузка':'перезагрузка',
+  'msg:проверка запущена':'проверка запущена',
+  'msg:файл прошивки пуст':'файл прошивки пуст',
+  'msg:ошибка приёма файла':'ошибка приёма файла'
  },
  en:{
   langTitle:'Interface language',
@@ -309,10 +321,16 @@ const I18N={
   wifiHint:'Telnet is available on port 23. When STA connects, the access point is switched off.',
   hTime:'Time (NTP)', ntpServerLbl:'NTP server', ntpTzLbl:'Time zone (POSIX TZ)', ntpApply:'Apply time',
   ntpHint:'After synchronization the log and monitor show real time. TZ examples: <code>MSK-3</code>, <code>UTC0</code>, <code>CET-1CEST,M3.5.0,M10.5.0/3</code>.',
-  hOta:'Firmware update (OTA)', fwUrlLbl:'Firmware URL', flashBtn:'Flash', rebootBtn:'Reboot',
-  cfgSaveBtn:'Save settings to file', cfgLoadBtn:'Restore from file',
+  hOta:'Firmware update (OTA)', fwFileLbl:'Firmware file', flashFileBtn:'Flash from file',
+  rebootBtn:'Reboot', checkUpdateBtn:'Check for updates', updateBtn:'Update',
+  autoUpdateLbl:'update automatically',
+  autoUpdateTitle:'Check the version on GitHub at boot and once a day; install a newer firmware without confirmation',
+  updateInfo:'Version {remote} is available (current {local}).', updateNone:'No updates',
+  updateCheckErr:'failed to check version', updateCheckStarted:'check started',
+  fwFileMissing:'select a firmware file',
+  cfgSaveBtn:'Save settings', cfgLoadBtn:'Restore',
   cfgHint:'The settings file contains all parameters, Wi-Fi/MQTT passwords and the web password hash. Store it securely. Restoring replaces the current settings.',
-  otaHint:'ESP32 will reboot after a successful flash. Two OTA slots are already defined in partitions_ota.csv.',
+  otaHint:'A local .bin is flashed with "Flash from file". The version is checked on GitHub at boot and once a day; a newer one will be shown above. With automatic updates enabled, the new firmware is installed without confirmation.',
   hSecurity:'Security', oldPassLbl:'Current password', newPassLbl:'New password',
   newPass2Lbl:'Repeat new password', passwdBtn:'Change password',
   securityHint:'The password is the URL path: <code>http://&lt;ip&gt;/sec</code>, default <code>sec</code>. The same password is used for Telnet. Allowed: letters, digits and <code>. _ - ~</code>. Change it here or with <code>passwd &lt;new&gt;</code>. After changing, open the new address.',
@@ -331,7 +349,7 @@ const I18N={
   urlSendLabel:'Send: ', urlReadLabel:'Read reply: ', mqttCodeLabel:'MQTT code: ',
   mqttTargetLabel:'MQTT target: ', mqttOutLabel:'MQTT outgoing: ', trafficLabel:'traffic',
   errLink:'connection error', foundAps:'APs found: ', passwordMissing:'Password is not specified',
-  passwordMismatch:'Passwords do not match', specifyUrl:'enter URL',
+  passwordMismatch:'Passwords do not match',
   exportErr:'settings export failed', cfgSavedFile:'settings saved to file',
   saveFileErr:'failed to save file', restoreConfirm:'Restore settings from {f}? Current settings will be replaced.',
   readFileErr:'failed to read settings file', rebootConfirm:'Reboot ESP32?',
@@ -346,6 +364,9 @@ const I18N={
   'msg:нет данных':'no data', 'msg:нужен URL':'URL required',
   'msg:не удалось сформировать файл':'failed to build file',
   'msg:OTA запущена':'OTA started', 'msg:перезагрузка':'rebooting',
+  'msg:проверка запущена':'check started',
+  'msg:файл прошивки пуст':'firmware file is empty',
+  'msg:ошибка приёма файла':'file receive error',
   'msg:Password is not specified':'Password is not specified',
   'msg:Wrong password':'Wrong password',
   'msg:Invalid password: A-Z a-z 0-9 . _ - ~ (max 32)':'Invalid password: A-Z a-z 0-9 . _ - ~ (max 32)',
@@ -391,6 +412,11 @@ const LOG_DICT=[
  ['OTA: прошивка установлена, перезагрузка','OTA: firmware installed, rebooting'],
  ['OTA: прошивка подтверждена','OTA: firmware confirmed'],
  ['OTA уже выполняется','OTA already in progress'],
+  ['доступна прошивка v','firmware v'],
+  [' (сейчас v',' (current v'],
+  ['проверка версии: актуальна v','version check: up to date v'],
+  ['не удалось проверить версию прошивки','failed to check firmware version'],
+  ['автообновление прошивки','automatic firmware update'],
  ['OTA запущена','OTA started'],
  ['журнал очищен','log cleared'],
  ['журнал пуст','log is empty'],
@@ -429,6 +455,13 @@ function trOta(s){
     if(s.indexOf('ошибка: ')===0)s=t('otaErr')+s.slice(8);
   }
   return s;
+}
+function renderOtaUpdate(s){
+  const local=s.version||'–', remote=s.ota_remote||'–';
+  $('otaVerInfo').textContent='v'+local+' · GitHub: v'+remote;
+  const avail=!!s.ota_available;
+  $('otaUpdateBox').style.display=avail?'':'none';
+  if(avail)$('otaUpdateInfo').textContent=t('updateInfo',{remote:remote,local:local});
 }
 /* Время работы считаем на клиенте, чтобы не показывать русский текст в EN */
 function formatUptime(sec){
@@ -484,7 +517,7 @@ async function api(path,body){
 const dirty=new Set();
 const CFG_IDS=['baud1','baud2','bridge','echo','mirror','syslog',
   'autoBaud1','autoBaud2','baudProbe',
-  'usbTarget','autoMs','autoText','ssid','otaUrl',
+  'usbTarget','autoMs','autoText','ssid','autoUpdate',
   'ntpServer','ntpTz','cmdMode','cmdTarget','mqttUri','mqttTopic','mqttUser'];
 CFG_IDS.forEach(id=>{const el=$(id);if(!el)return;
   el.addEventListener('input',()=>dirty.add(id));
@@ -492,6 +525,7 @@ CFG_IDS.forEach(id=>{const el=$(id);if(!el)return;
 });
 function clearDirty(ids){ids.forEach(id=>dirty.delete(id));}
 async function saveCfg(ids,body){const j=await api('/api/config',body);if(j&&j.ok)clearDirty(ids);return j;}
+$('autoUpdate').onchange=e=>saveCfg(['autoUpdate'],{auto_update:e.target.checked});
 function setVal(id,v){const el=$(id);if(el&&!dirty.has(id)&&document.activeElement!==el)el.value=v;}
 const targetName=v=>v===0?'USB':v===1?'UART1':v===2?'UART2':t('bothUart');
 const hexClean=s=>(s||'').replace(/\s+/g,'');   /* пробелы в HEX разрешены, но наружу уходит без них */
@@ -531,7 +565,9 @@ async function refresh(force){
     (s.auto_baud1?(' · UART1: '+(s.baud1_detected?(t('baudDetected')+' '+s.baud1_detected):t('baudSearching'))):'')+
     (s.auto_baud2?(' · UART2: '+(s.baud2_detected?(t('baudDetected')+' '+s.baud2_detected):t('baudSearching'))):'');
   setVal('usbTarget',String(s.usb_target));setVal('autoMs',String(s.auto_ms));setVal('autoText',s.auto_text||'');
-  setVal('ssid',s.wifi.ssid||'');setVal('otaUrl',s.ota_url||'');
+  setVal('ssid',s.wifi.ssid||'');
+  if(!dirty.has('autoUpdate'))$('autoUpdate').checked=!!s.auto_update;
+  renderOtaUpdate(s);
   setVal('ntpServer',s.time?s.time.server:'pool.ntp.org');setVal('ntpTz',s.time?s.time.tz:'MSK-3');
   const mq=s.mqtt||{}, mode=mq.mode||0;
   setVal('cmdMode',String(mode));setVal('cmdTarget',String(mq.target||3));
@@ -713,9 +749,22 @@ $('passwdBtn').onclick=async()=>{
   if(j&&j.ok){$('oldPass').value='';$('newPass').value='';$('newPass2').value='';}
 };
 $('otaBtn').onclick=async()=>{
-  const u=$('otaUrl').value.trim();if(!u){toast(t('specifyUrl'),true);return;}
-  const j=await api('/api/ota',{url:u});if(j&&j.ok)clearDirty(['otaUrl']);
+  const f=$('otaFile').files&&$('otaFile').files[0];
+  if(!f){toast(t('fwFileMissing'),true);return;}
+  toast(t('otaLoading'));
+  try{
+    const buf=await f.arrayBuffer();
+    const r=await fetch('/api/ota/file',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:buf});
+    if(r.status===401){location.href=location.pathname;return;}
+    const j=await r.json();
+    toast(trMsg(j.msg||(j.ok?'OTA запущена':'OTA ошибка')),!j.ok);
+  }catch(e){toast(t('errLink'),true);}
 };
+$('checkOtaBtn').onclick=async()=>{
+  const j=await api('/api/ota/check',{});
+  if(j&&j.ok){toast(t('updateCheckStarted'));setTimeout(()=>refresh(true),1500);}
+};
+$('otaRemoteBtn').onclick=async()=>{await api('/api/ota',{});};
 $('rebootBtn').onclick=()=>{if(confirm(t('rebootConfirm')))api('/api/reboot',{});};
 
 $('cfgSaveBtn').onclick=async()=>{
@@ -726,7 +775,7 @@ $('cfgSaveBtn').onclick=async()=>{
     const blob=new Blob([await r.text()],{type:'application/json'});
     const a=document.createElement('a'), d=new Date(), p=n=>String(n).padStart(2,'0');
     a.href=URL.createObjectURL(blob);
-    a.download='pass-through-uart-'+(($('ver').textContent||'1.0.4'))+'-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'.json';
+    a.download='pass-through-uart-'+(($('ver').textContent||'1.0.5'))+'-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'.json';
     document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),1000);
     toast(t('cfgSavedFile'));

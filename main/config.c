@@ -24,7 +24,7 @@ static void defaults(app_config_t *c)
     strcpy(c->auto_text, "AT");
     strcpy(c->wifi_ssid, "");
     strcpy(c->wifi_pass, "");
-    strcpy(c->ota_url, "");
+    strcpy(c->ota_url, "");   /* legacy-поле: осталось в структуре для совместимости NVS */
     c->cmd_mode = 0;
     c->cmd_target = 3;
     strcpy(c->mqtt_uri, "");
@@ -36,6 +36,7 @@ static void defaults(app_config_t *c)
     c->auto_baud1 = false;
     c->auto_baud2 = false;
     strcpy(c->baud_probe, "AT|AT+GMR");
+    c->auto_update = false;
 }
 
 void config_load(void)
