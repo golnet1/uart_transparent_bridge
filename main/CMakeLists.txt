@@ -1,0 +1,33 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "config.c"
+        "event_bus.c"
+        "uart_bridge.c"
+        "wifi.c"
+        "cli.c"
+        "charset.c"
+        "auth.c"
+        "mqtt_client.c"
+        "time_sync.c"
+        "telnet.c"
+        "ota.c"
+        "web.c"
+        "web_ui.cpp"
+    INCLUDE_DIRS "."
+    REQUIRES
+        driver
+        esp_timer
+        nvs_flash
+        esp_event
+        esp_netif
+        esp_wifi
+        lwip
+        esp_http_server
+        esp_http_client
+        esp_https_ota
+        app_update
+        json
+        mbedtls
+        mqtt
+)
