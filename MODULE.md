@@ -1,6 +1,6 @@
 # Pass-Through UART — описание работы модуля
 
-Документ описывает внутреннее устройство прошивки **Pass-Through UART v1.0.5**:
+Документ описывает внутреннее устройство прошивки **Pass-Through UART v1.0.6**:
 как устроены подсистемы, в каком порядке они запускаются, как данные идут между
 UART, вебом, Telnet, MQTT и журналом. Для пользовательских инструкций см.
 [README.md](README.md).
@@ -493,7 +493,7 @@ POST /api/config/import   → применение файла
 {
   "format": "pass-through-uart-config",
   "config_format": 1,
-  "app_version": "1.0.5",
+  "app_version": "1.0.6",
   "saved_at": "20.11 03:30:00",
   "auth_hash": "...",
   "config": { /* все поля app_config_t */ }
