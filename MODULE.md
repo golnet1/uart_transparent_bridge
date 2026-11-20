@@ -1,6 +1,6 @@
 # Pass-Through UART — описание работы модуля
 
-Документ описывает внутреннее устройство прошивки **Pass-Through UART v1.0.6**:
+Документ описывает внутреннее устройство прошивки **Pass-Through UART v1.0.7**:
 как устроены подсистемы, в каком порядке они запускаются, как данные идут между
 UART, вебом, Telnet, MQTT и журналом. Для пользовательских инструкций см.
 [README.md](README.md).
@@ -493,7 +493,7 @@ POST /api/config/import   → применение файла
 {
   "format": "pass-through-uart-config",
   "config_format": 1,
-  "app_version": "1.0.6",
+  "app_version": "1.0.7",
   "saved_at": "20.11 03:30:00",
   "auth_hash": "...",
   "config": { /* все поля app_config_t */ }
@@ -583,7 +583,9 @@ http://<ip>/<пароль>?log=50                → последние 50 ст�
 ### 12.2 MQTT
 
 Клиент (`mqtt_client.c`) запускается только если `mqtt_uri` не пуст и
-`cmd_mode` равен `1` или `2`. Keepalive 60 с, reconnect 2 с.
+`cmd_mode` равен `1` или `2`, и только после события `IP_EVENT_STA_GOT_IP`
+(старт в AP-режиме без STA больше не пытается подключиться к брокеру).
+Keepalive 60 с, reconnect 2 с.
 
 Адрес брокера можно задавать как `mqtt://host:1883`, так и просто `host` или
 `host:1883`. `mqtt_normalize_uri()` приводит любой из этих видов к

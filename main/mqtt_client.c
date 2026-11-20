@@ -7,6 +7,7 @@
 #include <strings.h>
 
 #include "esp_event.h"
+#include "esp_netif.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -16,6 +17,7 @@
 #include "config.h"
 #include "event_bus.h"
 #include "uart_bridge.h"
+#include "wifi.h"
 
 static const char *TAG = "mqtt";
 static esp_mqtt_client_handle_t s_client;
@@ -245,7 +247,9 @@ void mqtt_normalize_uri(const char *src, char *dst, size_t cap)
 static void start_client(void)
 {
     const app_config_t *c = config_get();
+    if (s_client) return;                       /* не создаём второй клиент */
     if (c->mqtt_uri[0] == '\0' || (c->cmd_mode != 1 && c->cmd_mode != 2)) return;
+    if (!wifi_sta_connected()) return;           /* только после получения STA IP */
 
     mqtt_normalize_uri(c->mqtt_uri, s_uri, sizeof(s_uri));
     esp_mqtt_client_config_t cfg = {
@@ -263,6 +267,15 @@ static void start_client(void)
     else ESP_LOGI(TAG, "подключение к %s", s_uri);
 }
 
+/* STA получил IP — теперь можно подключаться к брокеру. Повторные события
+   игнорируются: start_client() не создаёт клиент, если он уже жив. */
+static void sta_got_ip_handler(void *arg, esp_event_base_t base,
+                               int32_t id, void *data)
+{
+    (void)arg; (void)base; (void)id; (void)data;
+    start_client();
+}
+
 void mqtt_init(void)
 {
     if (s_evt_q) return;
@@ -270,7 +283,9 @@ void mqtt_init(void)
     event_bus_subscribe(s_evt_q, SUB_TRAFFIC);
     xTaskCreate(traffic_task, "mqtt_traffic", 4096, NULL, 4, NULL);
     s_cmd_target = config_get()->cmd_target;
-    start_client();
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                                        sta_got_ip_handler, NULL, NULL));
+    start_client();   /* на случай, если STA уже подключён */
 }
 
 void mqtt_apply_config(void)
